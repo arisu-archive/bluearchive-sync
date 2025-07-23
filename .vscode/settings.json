@@ -1,0 +1,43 @@
+{
+    "cSpell.words": [
+        "AWSCURRENT",
+        "bson",
+        "configx",
+        "golangci",
+        "gomplate",
+        "govulncheck",
+        "grpcx",
+        "healthcheck",
+        "inshopline",
+        "kubeconfig",
+        "loadx",
+        "logx",
+        "metricx",
+        "mongox",
+        "oidc",
+        "qiniu",
+        "qmgo",
+        "secretmanager",
+        "shopline",
+        "sonarcloud",
+        "sonarsource",
+        "tracex",
+        "vulcheck",
+        "vuln"
+    ],
+    "go.lintTool": "golangci-lint",
+    "go.lintFlags": [
+        "--fast",
+        "--fix",
+    ],
+    "gopls": {
+        "formatting.local": "github.com/arisu-archive",
+        "formatting.gofumpt": true,
+    },
+    "editor.rulers": [
+        {
+            "column": 120,
+            "color": "#3E4451"
+        }
+    ]
+}
