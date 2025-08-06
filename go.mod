@@ -3,7 +3,7 @@ module github.com/arisu-archive/bluearchive-data-sync
 go 1.24.3
 
 require (
-	github.com/arisu-archive/assets-dumper v0.0.0-20250713101538-5ab9bd26f5ff
+	github.com/arisu-archive/assets-dumper v0.0.0-20250805161345-f2c9e2fbf262
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
 )
@@ -12,10 +12,10 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
-	github.com/arisu-archive/arona-flatbuffers v0.1.1 // indirect
+	github.com/arisu-archive/arona-flatbuffers v0.2.1 // indirect
 	github.com/arisu-archive/bluearchive-fbs-utils v0.0.0-20250523141606-65e055cdb50b // indirect
 	github.com/arisu-archive/memorypack-go v0.0.0-20250304173138-3a39e4bd971e // indirect
-	github.com/arisu-archive/plana-flatbuffers v0.3.0 // indirect
+	github.com/arisu-archive/plana-flatbuffers v0.4.0 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.9.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-resty/resty/v2 v2.16.5 // indirect
