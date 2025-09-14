@@ -4,6 +4,8 @@
 
 .PHONY: prepare
 prepare:
+	git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
+	go env -w GOPRIVATE=github.com/arisu-archive/*
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(shell go env GOPATH)/bin v2.1.6
 	go install github.com/vektra/mockery/v3@v3.4.0
 
@@ -21,11 +23,6 @@ no-dirty:
 .PHONY: build
 build:
 	go build -o sync ./cmd/ba-sync/main.go
-
-.PHONY: prepare
-prepare:
-	git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
-	go env -w GOPRIVATE=github.com/arisu-archive/*
 
 # ==================================================================================== #
 # QUALITY CONTROL
