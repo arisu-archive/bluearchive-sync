@@ -4,20 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"path/filepath"
-	"strconv"
 
 	"github.com/arisu-archive/assets-dumper/pkg/resourceapi"
 	"github.com/arisu-archive/assets-dumper/pkg/resources"
-	"github.com/arisu-archive/bluearchive-data-sync/pkg/adb"
+	"github.com/arisu-archive/bluearchive-data-sync/pkg/adbx"
 	"github.com/arisu-archive/bluearchive-data-sync/pkg/patcher/internal/shared"
 	"github.com/arisu-archive/bluearchive-data-sync/pkg/xdelta"
 )
 
 type Options struct {
+	Forced       bool
 	PreloadOnly  bool
 	CachePath    string
-	Device       adb.Device
+	Device       adbx.Device
 	XdeltaClient *xdelta.Client
 	Concurrency  int
 }
@@ -38,6 +37,7 @@ func NewPatcher(opts Options) *Patcher {
 
 func NewPatcherWithAssetClient(opts Options, assetClient resourceapi.Client) *Patcher {
 	config := &PatcherConfig{
+		Forced:       opts.Forced,
 		PreloadOnly:  opts.PreloadOnly,
 		CachePath:    opts.CachePath,
 		Device:       opts.Device,
@@ -47,7 +47,7 @@ func NewPatcherWithAssetClient(opts Options, assetClient resourceapi.Client) *Pa
 	}
 
 	if config.Concurrency <= 0 {
-		config.Concurrency = 3 // Default concurrency
+		config.Concurrency = 16
 	}
 
 	// Create components
@@ -55,7 +55,7 @@ func NewPatcherWithAssetClient(opts Options, assetClient resourceapi.Client) *Pa
 	device := NewADBDeviceManager(config.Device)
 	versionManager := NewDeviceVersionManager(device, config.AssetClient)
 	patchProcessor := NewPatchFileProcessor(config.AssetClient, config.XdeltaClient, cache, device)
-	newProcessor := NewNewFileProcessor(config.AssetClient, cache, device)
+	newProcessor := NewFreshFileProcessor(config.AssetClient, cache, device)
 
 	return &Patcher{
 		config:         config,
@@ -102,11 +102,11 @@ func (p *Patcher) ensureGameCompatibility(ctx context.Context) error {
 		return fmt.Errorf("failed to get latest version: %w", err)
 	}
 
-	slog.Info("version check", "current", currentVersion, "latest", latestVersion)
+	slog.Debug("version check", "current", currentVersion, "latest", latestVersion)
 
 	// Update if needed
 	if currentVersion != latestVersion {
-		slog.Info("updating game application")
+		slog.Debug("updating game application")
 		if err := p.updateGameApplication(ctx); err != nil {
 			return fmt.Errorf("failed to update game: %w", err)
 		}
@@ -135,6 +135,8 @@ func (p *Patcher) applyPatches(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to get current versions: %w", err)
 	}
+	slog.Debug("current versions", "versions", versions)
+	p.config.AssetClient = p.config.AssetClient.WithPatchVersion(versions["Preload"])
 
 	fileHashes, err := p.versionManager.GetFileHashes()
 	if err != nil {
@@ -148,14 +150,22 @@ func (p *Patcher) applyPatches(ctx context.Context) error {
 	}
 
 	slog.Info("file analysis", "total", len(files), "patch", countByType(files, FileTypePatch), "new", countByType(files, FileTypeNew))
+	if len(files) == 0 {
+		slog.Warn("no files to process")
+		return nil
+	}
 
 	// Process files
-	if err := p.processFiles(ctx, files, versions["Preload"]); err != nil {
+	latestPatchVersion, err := p.config.AssetClient.GetLatestPatchVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get latest patch version: %w", err)
+	}
+	if err := p.processFiles(ctx, files, latestPatchVersion); err != nil {
 		return fmt.Errorf("failed to process files: %w", err)
 	}
 
 	// Update metadata
-	if err := p.updateMetadata(ctx, fileHashes, versions); err != nil {
+	if err := p.updateMetadata(ctx, fileHashes); err != nil {
 		return fmt.Errorf("failed to update metadata: %w", err)
 	}
 
@@ -170,27 +180,28 @@ func (p *Patcher) identifyFiles(ctx context.Context, patchVersion int64, fileHas
 	}
 
 	var files []*FileInfo
-
 	for _, resource := range resources {
 		file := &FileInfo{
+			Type:         FileTypeNew,
 			Path:         resource.Path,
 			Hash:         resource.Hash,
 			Size:         resource.Size,
 			PatchVersion: patchVersion,
 		}
 
-		// Update hash cache
-		fileHashes[resource.Path] = resource.Hash
-
-		// Determine file type
-		if currentHash, exists := fileHashes[resource.Path]; exists && currentHash == resource.Hash {
-			file.Type = FileTypeSkip
-		} else if exists {
-			file.Type = FileTypePatch
-		} else {
-			file.Type = FileTypeNew
+		if !p.config.Forced {
+			// Determine file type
+			if currentHash, exists := fileHashes[resource.Path]; exists && currentHash == resource.Hash {
+				file.Type = FileTypeSkip
+			} else if exists {
+				file.Type = FileTypePatch
+			} else {
+				file.Type = FileTypeNew
+			}
 		}
 
+		// Update hash cache
+		fileHashes[resource.Path] = resource.Hash
 		if file.Type != FileTypeSkip {
 			files = append(files, file)
 		}
@@ -199,12 +210,11 @@ func (p *Patcher) identifyFiles(ctx context.Context, patchVersion int64, fileHas
 	return files, nil
 }
 
-func (p *Patcher) processFiles(ctx context.Context, files []*FileInfo, patchVersion int64) error {
+func (p *Patcher) processFiles(ctx context.Context, files []*FileInfo, patchVersion string) error {
 	opts := &ProcessOptions{
-		CacheDir:     filepath.Join(p.config.CachePath, strconv.FormatInt(patchVersion, 10)),
 		PatchVersion: patchVersion,
 		Concurrency:  p.config.Concurrency,
-		FileMode:     0o660, // Default file mode
+		FileMode:     0o664,
 	}
 
 	// Separate files by type
@@ -215,7 +225,7 @@ func (p *Patcher) processFiles(ctx context.Context, files []*FileInfo, patchVers
 	if len(patchFiles) > 0 {
 		slog.Info("processing patch files", "count", len(patchFiles))
 		patchOpts := *opts
-		patchOpts.FileMode = 0o660
+		patchOpts.FileMode = 0o664
 		stats, err := ProcessFilesWithConcurrency(ctx, patchFiles, p.patchProcessor, &patchOpts)
 		if err != nil {
 			return fmt.Errorf("failed to process patch files: %w", err)
@@ -235,7 +245,7 @@ func (p *Patcher) processFiles(ctx context.Context, files []*FileInfo, patchVers
 	if len(newFiles) > 0 {
 		slog.Info("processing new files", "count", len(newFiles))
 		newOpts := *opts
-		newOpts.FileMode = 0o770
+		newOpts.FileMode = 0o664
 		stats, err := ProcessFilesWithConcurrency(ctx, newFiles, p.newProcessor, &newOpts)
 		if err != nil {
 			return fmt.Errorf("failed to process new files: %w", err)
@@ -247,9 +257,9 @@ func (p *Patcher) processFiles(ctx context.Context, files []*FileInfo, patchVers
 	return nil
 }
 
-func (p *Patcher) updateMetadata(ctx context.Context, fileHashes map[string]string, versions map[string]int64) error {
+func (p *Patcher) updateMetadata(ctx context.Context, fileHashes map[string]string) error {
 	// Update to latest version
-	if err := p.versionManager.UpdateToLatestVersion(ctx, "Preload"); err != nil {
+	if err := p.versionManager.UpdateToLatestVersion(ctx); err != nil {
 		return fmt.Errorf("failed to update version: %w", err)
 	}
 
@@ -278,22 +288,6 @@ func (p *Patcher) logStats(operation string, stats *ProcessingStats) {
 			"processed", stats.FilesProcessed,
 			"bytes", stats.BytesProcessed)
 	}
-}
-
-// Legacy methods for backward compatibility
-func (p *Patcher) GetPatchVersions() (map[string]int64, error) {
-	return p.versionManager.GetCurrentVersions()
-}
-
-func (p *Patcher) GetPatchFileHash() (map[string]string, error) {
-	return p.versionManager.GetFileHashes()
-}
-
-func (p *Patcher) ComputeHash(filePath string, fileCache map[string]string) (string, error) {
-	if hash, ok := fileCache[filePath]; ok {
-		return hash, nil
-	}
-	return "", fmt.Errorf("%w: %s", shared.ErrFileNotFound, filePath)
 }
 
 // Helper functions

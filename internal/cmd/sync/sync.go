@@ -11,7 +11,7 @@ import (
 	"github.com/arisu-archive/assets-dumper/pkg/resourceapi"
 
 	"github.com/arisu-archive/bluearchive-data-sync/internal/cmd"
-	"github.com/arisu-archive/bluearchive-data-sync/pkg/adb"
+	"github.com/arisu-archive/bluearchive-data-sync/pkg/adbx"
 	"github.com/arisu-archive/bluearchive-data-sync/pkg/patcher"
 	"github.com/arisu-archive/bluearchive-data-sync/pkg/xdelta"
 )
@@ -46,6 +46,8 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 	c.Flags().StringVarP(&sc.opts.cachePath, "cache-path", "c", cacheFolderPath(), "Path to the cache directory")
 	c.Flags().StringVarP(&sc.opts.server, "server", "r", "global", "Server to use for the resource data")
 	c.Flags().BoolVar(&sc.opts.preloadOnly, "preload", true, "Only sync preload data")
+	c.Flags().BoolVar(&sc.opts.forced, "forced", false, "Force sync all data")
+	c.Flags().IntVar(&sc.opts.concurrency, "concurrency", 16, "Concurrency level for the patcher")
 	c.MarkFlagsMutuallyExclusive("serial", "host")
 	c.MarkFlagsOneRequired("serial", "host")
 
@@ -58,7 +60,7 @@ func (c *Command) Command() *cobra.Command {
 }
 
 func (c *Command) run(cmd *cobra.Command, _ []string) error {
-	adbClient, err := adb.NewClient()
+	adbClient, err := adbx.NewClient()
 	if err != nil {
 		return fmt.Errorf("failed to create adb client: %w", err)
 	}
@@ -71,10 +73,12 @@ func (c *Command) run(cmd *cobra.Command, _ []string) error {
 	}
 	p, err := patcher.NewPatcher(patcher.Options{
 		Server:       resourceapi.GetServer(c.opts.server),
+		Forced:       c.opts.forced,
 		PreloadOnly:  c.opts.preloadOnly,
 		CachePath:    c.opts.cachePath,
 		XdeltaClient: c.xdeltaClient,
 		Device:       device,
+		Concurrency:  c.opts.concurrency,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create patcher: %w", err)
@@ -85,17 +89,17 @@ func (c *Command) run(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func (c *Command) getAndroidDevice(adbClient *adb.Client) (adb.Device, error) {
+func (c *Command) getAndroidDevice(adbClient *adbx.Client) (adbx.Device, error) {
 	serial := c.opts.serial
 	if c.opts.adbHost != "" {
 		if err := adbClient.Connect(c.opts.adbHost); err != nil {
-			return adb.Device{}, fmt.Errorf("failed to connect to adb host: %w", err)
+			return adbx.Device{}, fmt.Errorf("failed to connect to adb host: %w", err)
 		}
 		serial = c.opts.adbHost
 	}
 	device, err := adbClient.GetDevice(serial)
 	if err != nil {
-		return adb.Device{}, fmt.Errorf("failed to get device: %w", err)
+		return adbx.Device{}, fmt.Errorf("failed to get device: %w", err)
 	}
 	return device, nil
 }

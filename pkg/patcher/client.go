@@ -13,10 +13,12 @@ func NewPatcher(opts Options) (Patcher, error) {
 	switch opts.Server {
 	case resourceapi.ServerGlobal:
 		return global.NewPatcher(global.Options{
+			Forced:       opts.Forced,
 			PreloadOnly:  opts.PreloadOnly,
 			CachePath:    opts.CachePath,
 			Device:       opts.Device,
 			XdeltaClient: opts.XdeltaClient,
+			Concurrency:  opts.Concurrency,
 		}), nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrInvalidServer, opts.Server)

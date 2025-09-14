@@ -5,23 +5,21 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"strings"
 	"time"
 
-	"github.com/arisu-archive/bluearchive-data-sync/pkg/adb"
+	"github.com/arisu-archive/bluearchive-data-sync/pkg/adbx"
 )
 
 type ADBDeviceManager struct {
-	device     adb.Device
-	fileHelper *DeviceFileHelper
+	device adbx.Device
 }
 
-func NewADBDeviceManager(device adb.Device) *ADBDeviceManager {
-	manager := &ADBDeviceManager{
+func NewADBDeviceManager(device adbx.Device) *ADBDeviceManager {
+	return &ADBDeviceManager{
 		device: device,
 	}
-	manager.fileHelper = NewDeviceFileHelper(manager)
-	return manager
 }
 
 func (d *ADBDeviceManager) PullFile(remotePath string) (io.ReadCloser, error) {
@@ -33,9 +31,25 @@ func (d *ADBDeviceManager) PullFile(remotePath string) (io.ReadCloser, error) {
 }
 
 func (d *ADBDeviceManager) PushFile(localReader io.Reader, remotePath string, perm int) error {
+	// Ensure the remote path is already exists
+	if err := d.CreateDirectory(path.Dir(remotePath)); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", path.Dir(remotePath), err)
+	}
+
+	// Push the file
 	if err := d.device.Push(localReader, remotePath, time.Now(), os.FileMode(perm)); err != nil {
 		return fmt.Errorf("failed to push file to %s: %w", remotePath, err)
 	}
+
+	// Change the owner to the root application user
+	userGroup, err := d.device.RunShellCommand("stat", "-c", "%U:%G", BaseAndroidPath)
+	if err != nil {
+		return fmt.Errorf("failed to get user group for %s: %w", BaseAndroidPath, err)
+	}
+	if _, err := d.device.RunShellCommand("chown", "-R", userGroup, path.Dir(remotePath)); err != nil {
+		return fmt.Errorf("failed to change owner to %s: %w", userGroup, err)
+	}
+
 	return nil
 }
 
@@ -69,7 +83,7 @@ func (d *ADBDeviceManager) DownloadAndInstallApp(reader io.Reader) error {
 	tempPath := "/data/local/tmp/output.xapk"
 
 	// Push app to device
-	if err := d.fileHelper.PushToDevicePath(reader, tempPath, 0o644); err != nil {
+	if err := d.PushFile(reader, tempPath, 0o644); err != nil {
 		return fmt.Errorf("failed to push app: %w", err)
 	}
 

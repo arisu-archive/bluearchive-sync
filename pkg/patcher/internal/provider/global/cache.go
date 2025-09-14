@@ -19,11 +19,11 @@ func NewFileCacheManager(baseDir string) *FileCacheManager {
 	}
 }
 
-func (c *FileCacheManager) Get(path string) (io.ReadCloser, error) {
+func (c *FileCacheManager) Get(patchVersion string, path string) (io.ReadCloser, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	fullPath := filepath.Join(c.baseDir, path)
+	fullPath := filepath.Join(c.baseDir, patchVersion, path)
 	file, err := os.Open(fullPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open cached file %s: %w", fullPath, err)
@@ -31,11 +31,11 @@ func (c *FileCacheManager) Get(path string) (io.ReadCloser, error) {
 	return file, nil
 }
 
-func (c *FileCacheManager) Put(path string, data io.Reader) error {
+func (c *FileCacheManager) Put(patchVersion string, path string, data io.Reader) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	fullPath := filepath.Join(c.baseDir, path)
+	fullPath := filepath.Join(c.baseDir, patchVersion, path)
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
@@ -54,11 +54,11 @@ func (c *FileCacheManager) Put(path string, data io.Reader) error {
 	return nil
 }
 
-func (c *FileCacheManager) Exists(path string) bool {
+func (c *FileCacheManager) Exists(patchVersion string, path string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	fullPath := filepath.Join(c.baseDir, path)
+	fullPath := filepath.Join(c.baseDir, patchVersion, path)
 	_, err := os.Stat(fullPath)
 	return err == nil
 }

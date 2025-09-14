@@ -6,4 +6,6 @@ type options struct {
 	cachePath   string
 	server      string
 	preloadOnly bool
+	forced      bool
+	concurrency int
 }

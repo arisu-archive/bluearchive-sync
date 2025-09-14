@@ -203,7 +203,7 @@ func (d Device) RunShellCommandWithBytes(cmd string, args ...string) ([]byte, er
 	if len(args) > 0 {
 		cmd = fmt.Sprintf("%s %s", cmd, strings.Join(args, " "))
 	}
-	slog.Info("running shell command", "cmd", cmd, "args", args)
+	slog.Debug("running shell command", "cmd", cmd, "args", args)
 	if strings.TrimSpace(cmd) == "" {
 		return nil, errors.New("adb shell: command cannot be empty")
 	}

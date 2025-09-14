@@ -14,14 +14,12 @@ import (
 type DeviceVersionManager struct {
 	device      DeviceManager
 	assetClient resourceapi.Client
-	fileHelper  *DeviceFileHelper
 }
 
 func NewDeviceVersionManager(device DeviceManager, assetClient resourceapi.Client) *DeviceVersionManager {
 	return &DeviceVersionManager{
 		device:      device,
 		assetClient: assetClient,
-		fileHelper:  NewDeviceFileHelper(device),
 	}
 }
 
@@ -101,7 +99,7 @@ func (v *DeviceVersionManager) UpdateVersions(versions map[string]int64) error {
 		return fmt.Errorf("failed to create version buffer: %w", err)
 	}
 
-	if err := v.fileHelper.PushToAndroidPath(buffer, "Patch/patch.version.map", 0o770); err != nil {
+	if err := v.device.PushFile(buffer, path.Join(AndroidDataPath, "Patch", "patch.version.map"), 0o664); err != nil {
 		return fmt.Errorf("failed to push version map: %w", err)
 	}
 
@@ -114,14 +112,14 @@ func (v *DeviceVersionManager) UpdateFileHashes(hashes map[string]string) error 
 		return fmt.Errorf("failed to create hash buffer: %w", err)
 	}
 
-	if err := v.fileHelper.PushToAndroidPath(buffer, "Patch/patch.file.hash", 0o770); err != nil {
+	if err := v.device.PushFile(buffer, path.Join(AndroidDataPath, "Patch", "patch.file.hash"), 0o664); err != nil {
 		return fmt.Errorf("failed to push file hash: %w", err)
 	}
 
 	return nil
 }
 
-func (v *DeviceVersionManager) UpdateToLatestVersion(ctx context.Context, key string) error {
+func (v *DeviceVersionManager) UpdateToLatestVersion(ctx context.Context) error {
 	latestVersionString, err := v.assetClient.GetLatestPatchVersion(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get latest patch version: %w", err)
@@ -137,7 +135,7 @@ func (v *DeviceVersionManager) UpdateToLatestVersion(ctx context.Context, key st
 		return fmt.Errorf("failed to get current versions: %w", err)
 	}
 
-	currentVersions[key] = latestVersion
+	currentVersions["Preload"] = latestVersion
 	return v.UpdateVersions(currentVersions)
 }
 

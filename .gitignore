@@ -399,3 +399,4 @@ $RECYCLE.BIN/
 config.yaml
 data/*
 resources/*
+tmp/*

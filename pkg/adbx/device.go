@@ -1,4 +1,4 @@
-package adb
+package adbx
 
 import (
 	"fmt"

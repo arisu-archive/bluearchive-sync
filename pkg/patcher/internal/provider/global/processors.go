@@ -12,6 +12,7 @@ import (
 
 	"github.com/arisu-archive/assets-dumper/pkg/resourceapi"
 	"github.com/arisu-archive/assets-dumper/pkg/resources"
+	"github.com/arisu-archive/bluearchive-data-sync/pkg/patcher/internal/shared"
 	"github.com/arisu-archive/bluearchive-data-sync/pkg/xdelta"
 )
 
@@ -41,24 +42,22 @@ func (tm *tempFileManager) cleanup() {
 
 // BaseProcessor provides common functionality for all processors
 type BaseProcessor struct {
-	cache      CacheManager
-	device     DeviceManager
-	fileHelper *DeviceFileHelper
+	cache  CacheManager
+	device DeviceManager
 }
 
 func NewBaseProcessor(cache CacheManager, device DeviceManager) *BaseProcessor {
 	return &BaseProcessor{
-		cache:      cache,
-		device:     device,
-		fileHelper: NewDeviceFileHelper(device),
+		cache:  cache,
+		device: device,
 	}
 }
 
 func (b *BaseProcessor) ProcessWithCache(ctx context.Context, file *FileInfo, opts *ProcessOptions, processFn func() error) error {
 	// Check cache first
-	if b.cache.Exists(file.Path) {
+	if b.cache.Exists(opts.PatchVersion, file.Path) {
 		slog.Debug("using cached file", "path", file.Path)
-		return b.pushCachedFile(file.Path, opts.FileMode)
+		return b.pushCachedFile(opts.PatchVersion, file.Path, opts.FileMode)
 	}
 
 	// Process the file
@@ -67,21 +66,21 @@ func (b *BaseProcessor) ProcessWithCache(ctx context.Context, file *FileInfo, op
 	}
 
 	// Push to device
-	return b.pushCachedFile(file.Path, opts.FileMode)
+	return b.pushCachedFile(opts.PatchVersion, file.Path, opts.FileMode)
 }
 
-func (b *BaseProcessor) pushCachedFile(filePath string, fileMode os.FileMode) error {
-	reader, err := b.cache.Get(filePath)
+func (b *BaseProcessor) pushCachedFile(patchVersion string, filePath string, fileMode os.FileMode) error {
+	reader, err := b.cache.Get(patchVersion, filePath)
 	if err != nil {
 		return fmt.Errorf("failed to get cached file: %w", err)
 	}
 	defer reader.Close()
 
-	return b.fileHelper.PushToAndroidPath(reader, "Resource/"+filePath, fileMode)
+	return b.device.PushFile(reader, path.Join(AndroidDataPath, "Resource", filePath), int(fileMode))
 }
 
-func (b *BaseProcessor) CacheFile(filePath string, reader io.Reader) error {
-	return b.cache.Put(filePath, reader)
+func (b *BaseProcessor) CacheFile(patchVersion string, filePath string, reader io.Reader) error {
+	return b.cache.Put(patchVersion, filePath, reader)
 }
 
 type PatchFileProcessor struct {
@@ -164,28 +163,28 @@ func (p *PatchFileProcessor) applyPatch(ctx context.Context, file *FileInfo, opt
 	}
 	defer outputReader.Close()
 
-	return p.CacheFile(file.Path, outputReader)
+	return p.CacheFile(opts.PatchVersion, file.Path, outputReader)
 }
 
-type NewFileProcessor struct {
+type FreshFileProcessor struct {
 	*BaseProcessor
 	assetClient resourceapi.Client
 }
 
-func NewNewFileProcessor(assetClient resourceapi.Client, cache CacheManager, device DeviceManager) *NewFileProcessor {
-	return &NewFileProcessor{
+func NewFreshFileProcessor(assetClient resourceapi.Client, cache CacheManager, device DeviceManager) *FreshFileProcessor {
+	return &FreshFileProcessor{
 		BaseProcessor: NewBaseProcessor(cache, device),
 		assetClient:   assetClient,
 	}
 }
 
-func (n *NewFileProcessor) ProcessFile(ctx context.Context, file *FileInfo, opts *ProcessOptions) error {
+func (n *FreshFileProcessor) ProcessFile(ctx context.Context, file *FileInfo, opts *ProcessOptions) error {
 	return n.ProcessWithCache(ctx, file, opts, func() error {
-		return n.downloadFile(ctx, file)
+		return n.downloadFile(ctx, file, opts)
 	})
 }
 
-func (n *NewFileProcessor) downloadFile(ctx context.Context, file *FileInfo) error {
+func (n *FreshFileProcessor) downloadFile(ctx context.Context, file *FileInfo, opts *ProcessOptions) error {
 	// Download file
 	reader, _, err := n.assetClient.DownloadResource(ctx, file.Path)
 	if err != nil {
@@ -194,7 +193,7 @@ func (n *NewFileProcessor) downloadFile(ctx context.Context, file *FileInfo) err
 	defer reader.Close()
 
 	// Cache the file
-	return n.CacheFile(file.Path, reader)
+	return n.CacheFile(opts.PatchVersion, file.Path, reader)
 }
 
 // ProcessFilesWithConcurrency processes files with controlled concurrency
@@ -220,7 +219,7 @@ func ProcessFilesWithConcurrency(ctx context.Context, files []*FileInfo, process
 				return
 			}
 
-			slog.Info("processing file", "path", f.Path, "type", f.Type)
+			slog.Debug("processing file", "path", f.Path, "type", f.Type)
 
 			err := processor.ProcessFile(ctx, f, opts)
 
@@ -230,7 +229,10 @@ func ProcessFilesWithConcurrency(ctx context.Context, files []*FileInfo, process
 				if errors.Is(err, resources.ErrPatchVersionNotFound) {
 					// Mark as new file and continue
 					f.Type = FileTypeNew
-					slog.Info("patch not found, marking as new file", "path", f.Path)
+					slog.Warn("patch not found, marking as new file", "path", f.Path)
+				} else if errors.Is(err, shared.ErrFileNotFound) {
+					f.Type = FileTypeNew
+					slog.Warn("source missing, marking as new file", "path", f.Path)
 				} else {
 					stats.Errors = append(stats.Errors, fmt.Errorf("failed to process %s: %w", f.Path, err))
 				}
