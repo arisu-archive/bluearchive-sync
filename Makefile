@@ -24,6 +24,7 @@ build:
 
 .PHONY: prepare
 prepare:
+	git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
 	go env -w GOPRIVATE=github.com/arisu-archive/*
 
 # ==================================================================================== #
