@@ -15,14 +15,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        goos: [linux, windows, darwin]
+        goos: [linux, windows]
         goarch: [amd64, arm64]
         include:
           - goos: windows
             ext: .exe
           - goos: linux
-            ext: ''
-          - goos: darwin
             ext: ''
 
     steps:
@@ -33,6 +31,15 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: |
+            ${{secrets.ARONA_FLATBUFFERS_PRIVATE_KEY}}
+            ${{secrets.PLANA_FLATBUFFERS_PRIVATE_KEY}}
+            ${{secrets.BA_ASSETS_DUMPER_PRIVATE_KEY}}
+            ${{secrets.BA_FBS_UTILS_PRIVATE_KEY}}
 
       - name: Cache Go build
         uses: actions/cache@v4
