@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -60,6 +61,14 @@ func (c *Command) Command() *cobra.Command {
 }
 
 func (c *Command) run(cmd *cobra.Command, _ []string) error {
+	// Preflight: ensure xdelta3 is available early
+	if _, err := c.xdeltaClient.Command(cmd.Context(), "config"); err != nil {
+		if errors.Is(err, xdelta.ErrXdelta3NotFound) {
+			return fmt.Errorf("xdelta3 not found: %w. Please install xdelta3 (or xdelta) and ensure it is on PATH", err)
+		}
+		return fmt.Errorf("failed to initialize xdelta3: %w", err)
+	}
+
 	adbClient, err := adbx.NewClient()
 	if err != nil {
 		return fmt.Errorf("failed to create adb client: %w", err)
