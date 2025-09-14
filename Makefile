@@ -22,6 +22,10 @@ no-dirty:
 build:
 	go build -o sync ./cmd/ba-sync/main.go
 
+.PHONY: prepare
+prepare:
+	go env -w GOPRIVATE=github.com/arisu-archive/*
+
 # ==================================================================================== #
 # QUALITY CONTROL
 # ==================================================================================== #
