@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/arisu-archive/bluearchive-data-sync/internal/cmd/sync"
+	"github.com/arisu-archive/bluearchive-data-sync/internal/cmd/version"
 )
 
 type rootCommand struct {
@@ -27,7 +28,7 @@ func (r *rootCommand) Execute(args []string) {
 	}
 }
 
-func newRootCommand(version string, exit func(code int), in io.Reader, out, err io.Writer) *rootCommand {
+func newRootCommand(v string, exit func(code int), in io.Reader, out, err io.Writer) *rootCommand {
 	root := &rootCommand{
 		exit: exit,
 	}
@@ -39,7 +40,7 @@ func newRootCommand(version string, exit func(code int), in io.Reader, out, err 
 		Use:               "ba-sync <command> [flags]",
 		Short:             "ba-sync is a tool for syncing asset data to the Android device",
 		Example:           "ba-sync sync --serial <serial-number>",
-		Version:           version,
+		Version:           v,
 		SilenceErrors:     false,
 		SilenceUsage:      false,
 		Args:              cobra.NoArgs,
@@ -58,6 +59,7 @@ func newRootCommand(version string, exit func(code int), in io.Reader, out, err 
 
 	cmd.PersistentFlags().BoolVarP(&root.verbose, "verbose", "v", false, "verbose mode")
 	cmd.AddCommand(sync.NewCommand(in, out, err).Command())
+	cmd.AddCommand(version.NewCommand(in, out, err).Command())
 	cmd.SetIn(in)
 	cmd.SetOut(out)
 	cmd.SetErr(err)

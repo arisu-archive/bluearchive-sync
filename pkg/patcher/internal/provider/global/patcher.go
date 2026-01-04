@@ -53,7 +53,7 @@ func NewPatcherWithAssetClient(opts Options, assetClient resourceapi.Client) *Pa
 	// Create components
 	cache := NewFileCacheManager(config.CachePath)
 	device := NewADBDeviceManager(config.Device)
-	versionManager := NewDeviceVersionManager(device, config.AssetClient)
+	versionManager := NewDeviceVersionManager(device, config.AssetClient, config.PreloadOnly)
 	patchProcessor := NewPatchFileProcessor(config.AssetClient, config.XdeltaClient, cache, device)
 	newProcessor := NewFreshFileProcessor(config.AssetClient, cache, device)
 
@@ -68,10 +68,6 @@ func NewPatcherWithAssetClient(opts Options, assetClient resourceapi.Client) *Pa
 }
 
 func (p *Patcher) Apply(ctx context.Context) error {
-	if !p.config.PreloadOnly {
-		return fmt.Errorf("only preload is supported for now")
-	}
-
 	// Ensure game compatibility
 	if err := p.ensureGameCompatibility(ctx); err != nil {
 		return fmt.Errorf("game compatibility check failed: %w", err)
@@ -174,7 +170,11 @@ func (p *Patcher) applyPatches(ctx context.Context) error {
 }
 
 func (p *Patcher) identifyFiles(ctx context.Context, patchVersion int64, fileHashes map[string]string) ([]*FileInfo, error) {
-	resources, err := p.config.AssetClient.ListResources(ctx, "Preload/**")
+	filter := "**/**"
+	if p.config.PreloadOnly {
+		filter = "Preload/**"
+	}
+	resources, err := p.config.AssetClient.ListResources(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list resources: %w", err)
 	}

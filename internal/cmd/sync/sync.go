@@ -46,7 +46,7 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 	c.Flags().StringVarP(&sc.opts.adbHost, "host", "a", "", "Host of the ADB client")
 	c.Flags().StringVarP(&sc.opts.cachePath, "cache-path", "c", cacheFolderPath(), "Path to the cache directory")
 	c.Flags().StringVarP(&sc.opts.server, "server", "r", "global", "Server to use for the resource data")
-	c.Flags().BoolVar(&sc.opts.preloadOnly, "preload", true, "Only sync preload data")
+	c.Flags().BoolVar(&sc.opts.preloadOnly, "preload", false, "Only sync preload data")
 	c.Flags().BoolVar(&sc.opts.forced, "forced", false, "Force sync all data")
 	c.Flags().IntVar(&sc.opts.concurrency, "concurrency", 16, "Concurrency level for the patcher")
 	c.MarkFlagsMutuallyExclusive("serial", "host")

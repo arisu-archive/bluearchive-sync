@@ -14,12 +14,14 @@ import (
 type DeviceVersionManager struct {
 	device      DeviceManager
 	assetClient resourceapi.Client
+	preloadOnly bool
 }
 
-func NewDeviceVersionManager(device DeviceManager, assetClient resourceapi.Client) *DeviceVersionManager {
+func NewDeviceVersionManager(device DeviceManager, assetClient resourceapi.Client, preloadOnly bool) *DeviceVersionManager {
 	return &DeviceVersionManager{
 		device:      device,
 		assetClient: assetClient,
+		preloadOnly: preloadOnly,
 	}
 }
 
@@ -136,6 +138,10 @@ func (v *DeviceVersionManager) UpdateToLatestVersion(ctx context.Context) error 
 	}
 
 	currentVersions["Preload"] = latestVersion
+	if !v.preloadOnly {
+		// Also update other versions if not in preload-only mode
+		currentVersions["GameData"] = latestVersion
+	}
 	return v.UpdateVersions(currentVersions)
 }
 
